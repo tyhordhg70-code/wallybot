@@ -134,9 +134,9 @@ def _fetch_page_source(url):
 
 
 def _fetch_via_archive(url):
-    """Fetch from Internet Archive's Wayback Machine."""
+    """Fetch from Internet Archive's Wayback Machine (latest available snapshot)."""
     try:
-        archive_url = f"https://web.archive.org/web/2024/{url}"
+        archive_url = f"https://web.archive.org/web/{url}"
         resp = requests.get(
             archive_url,
             timeout=20,
