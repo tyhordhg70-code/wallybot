@@ -136,3 +136,19 @@ def extract_payment_status(payment_response):
         if "data" in payment_response and isinstance(payment_response["data"], dict):
             return extract_payment_status(payment_response["data"])
     return None
+
+
+def is_payment_completed(status_str):
+    """Check if a HoodPay payment status means completed/paid."""
+    if not status_str:
+        return False
+    s = status_str.lower()
+    return s in ("completed", "confirmed", "paid", "settled")
+
+
+def is_payment_failed(status_str):
+    """Check if a HoodPay payment status means failed/expired."""
+    if not status_str:
+        return False
+    s = status_str.lower()
+    return s in ("expired", "cancelled", "canceled", "failed", "refunded")

@@ -187,10 +187,10 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             hp_status_resp = hoodpay.get_payment(payment["hoodpay_id"])
             hp_status = hoodpay.extract_payment_status(hp_status_resp)
 
-            if hp_status in ("completed", "confirmed", "paid"):
+            if hoodpay.is_payment_completed(hp_status):
                 await _activate_subscription(query, user, payment)
                 return
-            elif hp_status in ("expired", "cancelled"):
+            elif hoodpay.is_payment_failed(hp_status):
                 db.update_payment_status(payment_id, hp_status)
                 await query.edit_message_text(
                     f"Payment {hp_status}. Please select a new plan.",
