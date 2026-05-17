@@ -64,26 +64,21 @@ def _draw_walmart_spark(draw, cx, cy, size=28):
 
 
 def _generate_barcode_image(barcode_data):
-    """Generate GS1 DataBar Expanded barcode image without text below."""
-    try:
-        img = treepoem.generate_barcode(
-            barcode_type="databarexpanded",
-            data=f"(8110){barcode_data}",
-            scale=3,
-        )
-        return img.convert("RGB")
-    except Exception as e:
-        logger.error(f"Barcode generation error with databarexpanded: {e}")
-        try:
-            img = treepoem.generate_barcode(
-                barcode_type="code128",
-                data=barcode_data,
-                scale=3,
-            )
-            return img.convert("RGB")
-        except Exception as e2:
-            logger.error(f"Fallback barcode generation error: {e2}")
-            return None
+    """Generate GS1 DataBar Expanded barcode image (no fallback).
+
+    Uses GS1 Application Identifier (8110) for North American Coupon Code
+    per the algorithm:
+        (8110) 0 AAAAAA 0BB 0004BB 001 1 00003 CCDDEE
+    where AAAAAA = first 6 digits of UPC, BB = discount, CC/DD/EE = YY/MM/DD (EST).
+
+    Requires Ghostscript to be installed (treepoem dependency).
+    """
+    img = treepoem.generate_barcode(
+        barcode_type="databarexpanded",
+        data=f"(8110){barcode_data}",
+        scale=3,
+    )
+    return img.convert("RGB")
 
 
 def _fetch_product_image(url):
@@ -197,7 +192,8 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
     draw.text((any_x, 170), "ANY ONE (1)", font=font_any_one, fill=TEXT_COLOR, anchor="mm")
     draw.text((any_x, 198), "QUALIFYING PRODUCT", font=font_qualifying, fill=TEXT_COLOR, anchor="mm")
 
-    # --- Product name (center-bottom, with wrapping for long names) ---
+    # --- Product name (right column, below the product image, never over barcode) ---
+    name_center_x = 700  # right of barcode area
     display_name = product_name or "QUALIFYING PRODUCT"
     display_name = display_name.upper()
     if len(display_name) > 55:
@@ -210,18 +206,19 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
             else:
                 line2 = f"{line2} {w}".strip()
         font_product_sm = _load_font(bold=True, size=17)
-        draw.text((COUPON_WIDTH // 2, 390), line1, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
-        draw.text((COUPON_WIDTH // 2, 412), line2, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 360), line1, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 384), line2, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
     else:
-        draw.text((COUPON_WIDTH // 2, 400), display_name, font=font_product, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 370), display_name, font=font_product, fill=TEXT_COLOR, anchor="mt")
 
     # --- Product image (right side) ---
     product_img = _fetch_product_image(product_image_url)
     if product_img:
-        max_w, max_h = 160, 170
+        max_w, max_h = 210, 220
         product_img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
-        paste_x = 710
-        paste_y = 140
+        # Right-align within the coupon: leave ~50px right margin
+        paste_x = COUPON_WIDTH - product_img.size[0] - 50
+        paste_y = 115
         if product_img.mode == "RGBA":
             # Create white background for RGBA images
             bg = Image.new("RGB", product_img.size, (255, 255, 255))

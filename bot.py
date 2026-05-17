@@ -33,10 +33,22 @@ AWAITING_DISCOUNT = 2
 # ─── /start ───
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
-    db.get_or_create_user(user.id, user.username, user.first_name)
+    try:
+        db.get_or_create_user(user.id, user.username, user.first_name)
+    except Exception as e:
+        logger.exception(f"DB error in /start for user {user.id}: {e}")
+        await update.message.reply_text(
+            "Sorry, the bot is having trouble connecting to its database. "
+            "Please try again in a moment, or contact support if the issue persists."
+        )
+        return ConversationHandler.END
 
     # Check active subscription
-    sub = db.get_active_subscription(user.id)
+    try:
+        sub = db.get_active_subscription(user.id)
+    except Exception as e:
+        logger.exception(f"DB error fetching subscription for {user.id}: {e}")
+        sub = None
     if sub:
         slots = db.get_product_slots(sub["id"])
         remaining = sub["item_count"] - len(slots)
@@ -567,15 +579,34 @@ async def _handle_discount_input(update: Update, context: ContextTypes.DEFAULT_T
     context.user_data["state"] = None
 
 
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
+    """Global error handler – logs the error and notifies the user."""
+    logger.exception("Unhandled exception while handling update", exc_info=context.error)
+    try:
+        if isinstance(update, Update):
+            if update.callback_query:
+                await update.callback_query.answer("Something went wrong. Please try /start again.", show_alert=True)
+            elif update.effective_message:
+                await update.effective_message.reply_text(
+                    "Something went wrong handling your request. Please try /start again."
+                )
+    except Exception:
+        pass
+
+
 def main():
-    db.init_db()
-    logger.info("Database initialized")
+    try:
+        db.init_db()
+        logger.info("Database initialized")
+    except Exception as e:
+        logger.exception(f"Database init failed (bot will still start): {e}")
 
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
+    app.add_error_handler(error_handler)
 
     logger.info("Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
