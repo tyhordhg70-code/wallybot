@@ -214,11 +214,11 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
     # --- Product image (right side) ---
     product_img = _fetch_product_image(product_image_url)
     if product_img:
-        max_w, max_h = 210, 220
+        max_w, max_h = 260, 260
         product_img.thumbnail((max_w, max_h), Image.Resampling.LANCZOS)
-        # Right-align within the coupon: leave ~50px right margin
-        paste_x = COUPON_WIDTH - product_img.size[0] - 50
-        paste_y = 115
+        # Right-align within the coupon: leave ~40px right margin
+        paste_x = COUPON_WIDTH - product_img.size[0] - 40
+        paste_y = 95
         if product_img.mode == "RGBA":
             # Create white background for RGBA images
             bg = Image.new("RGB", product_img.size, (255, 255, 255))

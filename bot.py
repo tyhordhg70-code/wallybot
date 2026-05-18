@@ -570,9 +570,12 @@ async def _handle_discount_input(update: Update, context: ContextTypes.DEFAULT_T
         )
 
     except Exception as e:
-        logger.error(f"Coupon generation error: {e}")
+        logger.exception(f"Coupon generation error: {e}")
+        err_text = f"{type(e).__name__}: {e}"
+        if len(err_text) > 300:
+            err_text = err_text[:300] + "..."
         await update.message.reply_text(
-            "Error generating coupon. Please try again.",
+            f"Error generating coupon.\n\nDetails: {err_text}\n\nPlease share this with support so we can fix it.",
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Try Again", callback_data="gen_existing")]]),
         )
 

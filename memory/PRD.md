@@ -43,6 +43,16 @@ manufacturer-style coupon images with a GS1 DataBar Expanded barcode.
 - Added `.env.example` so the (gitignored) `.env` can be reconstructed cleanly
   on any host.
 
+## What was implemented in this iteration (2026-02)
+- Enlarged the product image again per user feedback: max bounds now 260x260
+  (was 210x220) and lifted to `paste_y=95` for better vertical centering.
+- Surfaced real exception type+message in the bot's "Error generating coupon"
+  user-facing reply (and `logger.exception` for full traceback) so we can
+  diagnose remote Render failures from a user screenshot.
+- Confirmed via Render docs that `ghostscript` is preinstalled on the native
+  Python runtime's deploy environment — no `apt.txt` required. (apt.txt is
+  still kept for safety / portability.)
+
 ## What was verified
 - `treepoem.generate_barcode(barcode_type="databarexpanded", data="(8110)...")`
   renders a 891x102 image. ✓
