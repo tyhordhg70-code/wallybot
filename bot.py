@@ -545,16 +545,18 @@ async def _handle_discount_input(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Generating your coupon... Please wait.")
 
     try:
-        # Calculate expiry: subscription end date
-        sub = db.get_active_subscription(update.effective_user.id)
-        expiry = sub["end_date"].strftime("%m/%d/%Y") if sub and sub["end_date"] else None
-
+        # NOTE: the visible "EXPIRES" date on the coupon must match the date
+        # embedded inside the GS1 DataBar Expanded payload (today in EST). The
+        # coupon generator defaults to today (EST) when expiry_date=None, so we
+        # pass None here on purpose. Do NOT pass the subscription end_date — it
+        # is unrelated to the coupon date and would make the barcode/visible
+        # date mismatch, causing scanners to reject the coupon.
         coupon_bytes = coupon_generator.generate_coupon_image(
             upc_first6=slot["upc_first6"],
             discount=discount,
             product_name=slot.get("product_name"),
             product_image_url=slot.get("product_image_url"),
-            expiry_date=expiry,
+            expiry_date=None,
         )
 
         keyboard = [
@@ -565,10 +567,12 @@ async def _handle_discount_input(update: Update, context: ContextTypes.DEFAULT_T
 
         coupon_file = io.BytesIO(coupon_bytes)
         coupon_file.name = "coupon.png"
+        # Coupon expiry = today (EST) — same date embedded in the GS1 barcode.
+        today_est = datetime.now(coupon_generator.EST).strftime("%m/%d/%Y")
         await update.message.reply_document(
             document=coupon_file,
             filename="coupon.png",
-            caption=f"Coupon for: {slot.get('product_name', 'Product')}\nDiscount: ${discount}.00 OFF\nExpires: {expiry or 'N/A'}",
+            caption=f"Coupon for: {slot.get('product_name', 'Product')}\nDiscount: ${discount}.00 OFF\nExpires: {today_est}",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )
 

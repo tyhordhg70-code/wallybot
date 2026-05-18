@@ -66,6 +66,13 @@ manufacturer-style coupon images with a GS1 DataBar Expanded barcode.
   the PNG losslessly (photo path re-encodes to JPEG and can crush barcodes).
 - Verified the layout: barcode now 25..619 px horizontally, no overlap with
   product image (paste_x≈750+), product name, "ANY ONE (1)", or discount text.
+- Fixed coupon "EXPIRES" date: was incorrectly passing subscription `end_date`
+  (which could be far-future or stale, e.g. user reported a 2036 date). The
+  visible expiration MUST equal the YY/MM/DD encoded in the GS1 barcode (today,
+  EST) — otherwise scanners flag the coupon as inconsistent. `bot.py` now
+  passes `expiry_date=None` so the generator falls back to today (EST), and
+  the document caption uses the same `datetime.now(EST).strftime('%m/%d/%Y')`.
+  Verified: barcode payload ends with `260518` and coupon shows `05/18/2026`.
 
 ## What was verified
 - `treepoem.generate_barcode(barcode_type="databarexpanded", data="(8110)...")`
