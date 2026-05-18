@@ -52,6 +52,20 @@ manufacturer-style coupon images with a GS1 DataBar Expanded barcode.
 - Confirmed via Render docs that `ghostscript` is preinstalled on the native
   Python runtime's deploy environment — no `apt.txt` required. (apt.txt is
   still kept for safety / portability.)
+- **CRITICAL FIX — Barcode was unscannable.** Root cause: the previous renderer
+  produced the barcode at scale=3 (~891 px wide) and then `Image.LANCZOS`
+  downscaled to 300×100. The narrow GS1 DataBar Expanded bars get crushed to
+  sub-pixel widths by both the shrink ratio and the LANCZOS anti-aliasing.
+  Verified by decoding with `pyzbar`: raw treepoem output decoded as DATABAR_EXP,
+  the resized coupon barcode did not decode at all.
+  Fix: render with `scale=2` (~594 px native, decodes cleanly), paste at native
+  width with NO horizontal resize, only stretch vertically with NEAREST to 130 px.
+  After fix, `pyzbar` decodes the full coupon PNG and even the JPEG-quality-80
+  version successfully.
+- Switched delivery from `reply_photo` to `reply_document` so Telegram serves
+  the PNG losslessly (photo path re-encodes to JPEG and can crush barcodes).
+- Verified the layout: barcode now 25..619 px horizontally, no overlap with
+  product image (paste_x≈750+), product name, "ANY ONE (1)", or discount text.
 
 ## What was verified
 - `treepoem.generate_barcode(barcode_type="databarexpanded", data="(8110)...")`

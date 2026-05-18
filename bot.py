@@ -563,8 +563,11 @@ async def _handle_discount_input(update: Update, context: ContextTypes.DEFAULT_T
             [InlineKeyboardButton("Back to Menu", callback_data="back_to_start")],
         ]
 
-        await update.message.reply_photo(
-            photo=io.BytesIO(coupon_bytes),
+        coupon_file = io.BytesIO(coupon_bytes)
+        coupon_file.name = "coupon.png"
+        await update.message.reply_document(
+            document=coupon_file,
+            filename="coupon.png",
             caption=f"Coupon for: {slot.get('product_name', 'Product')}\nDiscount: ${discount}.00 OFF\nExpires: {expiry or 'N/A'}",
             reply_markup=InlineKeyboardMarkup(keyboard),
         )

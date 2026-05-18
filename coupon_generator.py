@@ -72,11 +72,16 @@ def _generate_barcode_image(barcode_data):
     where AAAAAA = first 6 digits of UPC, BB = discount, CC/DD/EE = YY/MM/DD (EST).
 
     Requires Ghostscript to be installed (treepoem dependency).
+
+    NOTE: scale=2 is chosen because it produces a barcode (~594px wide) that
+    fits the coupon without any horizontal shrinkage. Shrinking GS1 DataBar
+    Expanded breaks scanability because the narrowest bars get sub-pixel.
     """
     img = treepoem.generate_barcode(
         barcode_type="databarexpanded",
         data=f"(8110){barcode_data}",
-        scale=3,
+        scale=2,
+        options={"includetext": False, "height": 0.6},
     )
     return img.convert("RGB")
 
@@ -227,12 +232,14 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
         else:
             img.paste(product_img, (paste_x, paste_y))
 
-    # --- GS1 Barcode (bottom-left, no numbers below) ---
+    # --- GS1 Barcode (bottom-left) ---
+    # IMPORTANT: do NOT downscale the barcode horizontally — it kills scan
+    # reliability. We paste it at native width and only stretch height with
+    # NEAREST so the bars stay 1:1 with the rendered modules.
     barcode_img = _generate_barcode_image(barcode_data)
     if barcode_img:
-        # Crop to remove any text below the bars
+        # Crop to remove any text below the bars (just in case)
         w, h = barcode_img.size
-        # Find where bars end by scanning from bottom
         crop_bottom = h
         for y in range(h - 1, 0, -1):
             row_pixels = [barcode_img.getpixel((x, y)) for x in range(0, w, max(1, w // 20))]
@@ -242,10 +249,12 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
                 break
         barcode_cropped = barcode_img.crop((0, 0, w, min(crop_bottom, h)))
 
-        # Resize to fit
-        target_w, target_h = 300, 100
-        barcode_resized = barcode_cropped.resize((target_w, target_h), Image.Resampling.LANCZOS)
-        img.paste(barcode_resized, (25, 315))
+        # Stretch ONLY vertically (preserves bar widths) for a taller, easier
+        # to scan barcode. Width stays at native scale=2 (~594 px).
+        cw, ch = barcode_cropped.size
+        target_h = 130
+        barcode_resized = barcode_cropped.resize((cw, target_h), Image.Resampling.NEAREST)
+        img.paste(barcode_resized, (25, 320))
 
     # --- Fine print (bottom) ---
     fine = "Not valid with any other offer. Consumer pays any sales tax. VOID if copied, transferred, or expired."
