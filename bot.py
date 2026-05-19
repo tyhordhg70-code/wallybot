@@ -147,9 +147,19 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user = update.effective_user
 
-    # Accept terms -> show plan menu (send new message; don't edit the long welcome text)
+    # Accept terms -> show plan menu
     if data == "accept_terms":
-        await _show_main_menu(query.message, user.first_name)
+        keyboard = [
+            [InlineKeyboardButton("1 Day Plans", callback_data="dur_1day")],
+            [InlineKeyboardButton("3 Days Plans", callback_data="dur_3day")],
+            [InlineKeyboardButton("1 Week Plans", callback_data="dur_1week")],
+        ]
+        greeting = f"Welcome{(', ' + user.first_name) if user.first_name else ''}!"
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text=f"{greeting}\n\nSelect a plan duration to get started:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
         return
 
     # Duration selection
