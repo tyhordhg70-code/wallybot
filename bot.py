@@ -70,17 +70,62 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
         return ConversationHandler.END
 
-    await _show_main_menu(update.message, user.first_name)
+    await _show_welcome(update.message)
     return ConversationHandler.END
+
+
+WELCOME_TEXT = """\
+Welcome
+
+This bot generates manufacturer coupons for Walmart products.
+
+How it works:
+
+1. Find an item on walmart.com that's available at a store near you. Item must be around $50, as those work best.
+Discount can not be over $50. Items over 50$ can not be returned for money back.
+
+2. Copy the product link and send it here. The bot will look up the product and ask how much $ you want off.
+
+3. You'll receive a printable coupon with a valid barcode to use that will automatically deduct the amount you select upon generating the coupon. Print out the coupon on paper (one coupon per transaction, so if you are buying 10 items you need to print 10 coupons), bring them to the store with you, and scan them at self-checkout after scanning your item and the discount will apply automatically.
+If an employee is watching you, insert the coupon into the self checkout feeder on the bottom (it will pop up instruction on the screen to do so, if nobody is watching you, skip this step).
+
+4. The coupon discount will be applied automatically to your transaction. Only sales tax is not covered and must be paid by you. You must use ONE coupon per transaction. DO NOT fill up a cart with 100 items all at once, this will draw attention, you want to remain and seem like a legit shopper. It's advised maximum 2-3 items per checkout, but of course you can do more if you feel like its very crowded and nobody is paying attention to you.
+Scan one coupon per item, do not scan more than one item per purchase! if you have a cart with 5 items, you have to pay 5 separate times, NOT ring up 5 items all at once. You go one by one. After you purchase the 2-3 advised limit per cart, go to your car put the items there, come back in the store, and buy the rest, and keep repeating till you clear the entire stock.
+
+These coupons are unlimited until the expiry date. They may be used unlimited times for the specific item chosen until expiration.
+
+(WHEN LEAVING THE STORE IF SECURITY ASKS FOR RECEIPT SHOW THEM RECEIPT FROM MOBILE APP NOT PHYSICAL RECEIPT, see below how to add)
+━━━━━━━━━━━━━━━━━━━━━━
+
+HOW TO PROFIT FROM THIS:
+
+1. After purchasing the items, keep the physical receipts with you, go to your Walmart app and scan the barcode on the receipt to add the purchase to your account, do this for all items.
+2. After adding items to your app, start a return directly from the app for all of the items, and after doing so it will show you a barcode.
+3. Go to Guest Services to return the items back, tell them you got the wrong ones or your boss cancelled construction project or something.. and show the barcodes from your mobile app so they just scan them and process the return. DO NOT SHOW YOUR PHYSICAL PAPER RECEIPT TO THEM.
+4. After they scan barcode you will receive the original product price back. It is advised you pay with cash, so that you get back cash. Since you only paid for sales tax, which is only a few dollars, you receive back the original full price of the item, and earn around 48$ PER ITEM.
+
+__________
+
+Terms of Service
+
+• All sales are final. No refunds.
+• Keys are non-transferable.
+• We are not responsible for how you use the generated coupons.
+• Misuse of this service is at your own risk.
+• We reserve the right to revoke access at any time.
+
+By pressing Accept below, you agree to these terms.\
+"""
+
+
+async def _show_welcome(message):
+    """Show the welcome/terms screen with an Accept button."""
+    keyboard = [[InlineKeyboardButton("✅ Accept & Continue", callback_data="accept_terms")]]
+    await message.reply_text(WELCOME_TEXT, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def _show_main_menu(message_or_query, first_name=None):
     """Show the main plan selection menu."""
-    text = (
-        f"Welcome to WallyBot{(' ' + first_name) if first_name else ''}!\n\n"
-        "Generate Walmart coupons with ease.\n"
-        "Select a plan duration below:"
-    )
     keyboard = [
         [InlineKeyboardButton("1 Day Plans", callback_data="dur_1day")],
         [InlineKeyboardButton("3 Days Plans", callback_data="dur_3day")],
@@ -100,6 +145,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
     user = update.effective_user
+
+    # Accept terms -> show plan menu
+    if data == "accept_terms":
+        await _show_main_menu(query, user.first_name)
+        return
 
     # Duration selection
     if data.startswith("dur_"):
@@ -132,6 +182,11 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not plan:
             await query.edit_message_text("Invalid plan. Please try again.")
             return
+
+        # Acknowledge immediately so the button feels instant
+        await query.edit_message_text(
+            f"⏳ Creating your payment link for {plan['label']}...\nPlease wait a moment."
+        )
 
         # Create payment in DB
         payment = db.create_payment(
