@@ -83,6 +83,7 @@ How it works:
 
 1. Find an item on walmart.com that's available at a store near you. Item must be around $50, as those work best.
 Discount can not be over $50. Items over 50$ can not be returned for money back.
+Discount can not be more than item value.
 
 2. Copy the product link and send it here. The bot will look up the product and ask how much $ you want off.
 
