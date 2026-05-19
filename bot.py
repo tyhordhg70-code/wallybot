@@ -296,7 +296,16 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Main menu
     elif data == "main_menu":
-        await _show_main_menu(query, user.first_name)
+        keyboard = [
+            [InlineKeyboardButton("1 Day Plans", callback_data="dur_1day")],
+            [InlineKeyboardButton("3 Days Plans", callback_data="dur_3day")],
+            [InlineKeyboardButton("1 Week Plans", callback_data="dur_1week")],
+        ]
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="Select a plan duration to get started:",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
 
     # Add product
     elif data == "add_product":
@@ -404,9 +413,22 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 keyboard.append([InlineKeyboardButton("Generate Coupon", callback_data="gen_existing")])
             keyboard.append([InlineKeyboardButton("View My Products", callback_data="view_products")])
             keyboard.append([InlineKeyboardButton("Buy New Plan", callback_data="main_menu")])
-            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text=text,
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
         else:
-            await _show_main_menu(query, user.first_name)
+            keyboard = [
+                [InlineKeyboardButton("1 Day Plans", callback_data="dur_1day")],
+                [InlineKeyboardButton("3 Days Plans", callback_data="dur_3day")],
+                [InlineKeyboardButton("1 Week Plans", callback_data="dur_1week")],
+            ]
+            await context.bot.send_message(
+                chat_id=update.effective_chat.id,
+                text="Select a plan duration to get started:",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
 
 
 async def _activate_subscription(query, user, payment):
