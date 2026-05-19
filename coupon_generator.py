@@ -20,6 +20,7 @@ TEXT_COLOR = (0, 32, 96)
 FINE_PRINT_COLOR = (100, 100, 100)
 
 FONT_DIR = "/usr/share/fonts/truetype"
+WALMART_LOGO_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets", "walmart_logo.png")
 
 
 def _load_font(bold=False, size=20):
@@ -152,13 +153,24 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
     font_product = _load_font(bold=True, size=20)
     font_scan = _load_font(bold=True, size=13)
     font_limit = _load_font(bold=True, size=15)
-    font_fine = _load_font(False, size=11)
+    font_fine = _load_font(False, size=16)
 
-    # --- Walmart spark logo + text (top-left) ---
-    _draw_walmart_spark(draw, 45, 45, size=30)
-    # Small TM text
-    font_tm = _load_font(False, size=9)
-    draw.text((70, 25), "TM", font=font_tm, fill=TEXT_COLOR)
+    # --- Real Walmart logo (top-left) ---
+    try:
+        if os.path.exists(WALMART_LOGO_PATH):
+            logo = Image.open(WALMART_LOGO_PATH).convert("RGBA")
+            logo_target_h = 56
+            ratio = logo_target_h / logo.size[1]
+            logo_target_w = int(logo.size[0] * ratio)
+            logo = logo.resize((logo_target_w, logo_target_h), Image.Resampling.LANCZOS)
+            logo_bg = Image.new("RGB", logo.size, (255, 255, 255))
+            logo_bg.paste(logo, mask=logo.split()[3])
+            img.paste(logo_bg, (25, 22))
+        else:
+            _draw_walmart_spark(draw, 45, 45, size=30)
+    except Exception as e:
+        logger.warning(f"Failed to load Walmart logo: {e}")
+        _draw_walmart_spark(draw, 45, 45, size=30)
 
     # --- "MANUFACTURER'S COUPON" (top center) ---
     title_x = COUPON_WIDTH // 2 + 20
@@ -197,24 +209,29 @@ def generate_coupon_image(upc_first6, discount, product_name, product_image_url=
     draw.text((any_x, 170), "ANY ONE (1)", font=font_any_one, fill=TEXT_COLOR, anchor="mm")
     draw.text((any_x, 198), "QUALIFYING PRODUCT", font=font_qualifying, fill=TEXT_COLOR, anchor="mm")
 
-    # --- Product name (right column, below the product image, never over barcode) ---
-    name_center_x = 700  # right of barcode area
-    display_name = product_name or "QUALIFYING PRODUCT"
-    display_name = display_name.upper()
-    if len(display_name) > 55:
-        # Word-wrap to two lines
+    # --- Product name (right of barcode, never overlapping it) ---
+    # Barcode occupies x:25..~620, y:320..450. Place the name to the right of
+    # the barcode in the area x:640..1020 so the two never collide.
+    name_area_left = 640
+    name_area_right = 1020
+    name_center_x = (name_area_left + name_area_right) // 2
+    max_chars_per_line = 22
+    display_name = (product_name or "QUALIFYING PRODUCT").upper()
+    if len(display_name) > max_chars_per_line:
         words = display_name.split()
         line1, line2 = "", ""
         for w in words:
-            if len(line1) + len(w) + 1 <= 45:
+            if len(line1) + len(w) + 1 <= max_chars_per_line:
                 line1 = f"{line1} {w}".strip()
             else:
                 line2 = f"{line2} {w}".strip()
+        if len(line2) > max_chars_per_line:
+            line2 = line2[: max_chars_per_line - 1] + "…"
         font_product_sm = _load_font(bold=True, size=17)
-        draw.text((name_center_x, 360), line1, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
-        draw.text((name_center_x, 384), line2, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 365), line1, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 390), line2, font=font_product_sm, fill=TEXT_COLOR, anchor="mt")
     else:
-        draw.text((name_center_x, 370), display_name, font=font_product, fill=TEXT_COLOR, anchor="mt")
+        draw.text((name_center_x, 375), display_name, font=font_product, fill=TEXT_COLOR, anchor="mt")
 
     # --- Product image (right side) ---
     product_img = _fetch_product_image(product_image_url)
