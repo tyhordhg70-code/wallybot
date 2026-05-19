@@ -147,9 +147,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user = update.effective_user
 
-    # Accept terms -> show plan menu
+    # Accept terms -> show plan menu (send new message; don't edit the long welcome text)
     if data == "accept_terms":
-        await _show_main_menu(query, user.first_name)
+        await _show_main_menu(query.message, user.first_name)
         return
 
     # Duration selection
