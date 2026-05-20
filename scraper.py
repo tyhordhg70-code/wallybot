@@ -1,3 +1,4 @@
+import os
 import re
 import json
 import logging
@@ -228,16 +229,19 @@ def _fetch_via_jina_reader(url):
     """
     try:
         reader_url = f"https://r.jina.ai/{url}"
-        resp = requests.get(
-            reader_url,
-            timeout=45,
-            headers={
-                "User-Agent": HEADERS["User-Agent"],
-                "Accept": "text/html,*/*",
-                "X-Return-Format": "html",
-                "X-With-Generated-Alt": "false",
-            },
-        )
+        # NOTE: do NOT add an "X-With-Generated-Alt" header — Jina rejects
+        # the request with HTTP 401 when that header is present (verified
+        # empirically). Keep the header set minimal.
+        headers = {
+            "User-Agent": HEADERS["User-Agent"],
+            "Accept": "text/html,*/*",
+            "X-Return-Format": "html",
+        }
+        # Optional API key (env var) — gives higher rate limits but not required.
+        jina_key = os.environ.get("JINA_API_KEY")
+        if jina_key:
+            headers["Authorization"] = f"Bearer {jina_key}"
+        resp = requests.get(reader_url, timeout=45, headers=headers)
         logger.info(f"jina_reader → HTTP {resp.status_code}, len={len(resp.text)}")
         if resp.status_code == 200 and len(resp.text) > 1000:
             return resp.text
