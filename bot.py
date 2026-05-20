@@ -552,8 +552,7 @@ async def _handle_product_link(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data["state"] = "awaiting_discount"
         context.user_data["slot_id"] = existing_slot["id"]
         await update.message.reply_text(
-            f"Product found: {product['product_name'] or 'Unknown'}\n"
-            f"UPC: {product['upc']}\n\n"
+            f"Product found: {product['product_name'] or 'Unknown'}\n\n"
             "This product is already in your slots.\n"
             "What discount amount would you like? ($10-$49)\n"
             "Discount cannot be greater than item cost shown on shelf."
@@ -585,8 +584,7 @@ async def _handle_product_link(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["slot_id"] = slot["id"]
 
     await update.message.reply_text(
-        f"Product found: {product.get('product_name', 'Unknown')}\n"
-        f"UPC: {product.get('upc')}\n\n"
+        f"Product found: {product.get('product_name', 'Unknown')}\n\n"
         "What discount amount would you like?\n"
         "Discount must be $10-$49.\n"
         "Discount cannot be greater than item cost shown on shelf.\n\n"
