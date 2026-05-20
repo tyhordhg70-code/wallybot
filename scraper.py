@@ -117,8 +117,19 @@ def scrape_walmart_product(url):
     logger.info(f"Scraping URL={url!r}  item_id={item_id!r}")
 
     try:
+        # ── Method 0: Jina Reader (real browser on residential IPs) ──
+        # This is the most reliable method for bypassing Walmart's bot detection
+        # because the request to Walmart originates from Jina's infrastructure,
+        # not from our server. Free, no API key required.
+        page_source = _fetch_via_jina_reader(url)
+        if page_source and not _is_captcha_page(page_source):
+            _extract_from_source(page_source, result)
+            logger.info(f"jina_reader → upc={result['upc']!r}")
+        elif page_source:
+            logger.warning("jina_reader returned a CAPTCHA page")
+
         # ── Method 1: Walmart terra-firma JSON API (lightest, most reliable) ──
-        if item_id:
+        if not result["upc"] and item_id:
             data = _fetch_terra_firma(item_id)
             if data:
                 _extract_from_json_blob(data, result)
@@ -202,6 +213,39 @@ def scrape_walmart_product(url):
 # ──────────────────────────────────────────────────────────────────────────────
 # Fetch helpers
 # ──────────────────────────────────────────────────────────────────────────────
+
+def _fetch_via_jina_reader(url):
+    """
+    Fetch the Walmart page through Jina Reader (r.jina.ai).
+
+    Jina renders the target URL with a real headless browser on their own
+    infrastructure and returns the resulting HTML/markdown. Because the
+    request to walmart.com originates from Jina's IPs (not our server),
+    this bypasses Walmart's IP-based bot detection. Free, no API key.
+
+    We request HTML output (X-Return-Format: html) so our existing extractors,
+    including the __NEXT_DATA__ JSON parser, keep working unchanged.
+    """
+    try:
+        reader_url = f"https://r.jina.ai/{url}"
+        resp = requests.get(
+            reader_url,
+            timeout=45,
+            headers={
+                "User-Agent": HEADERS["User-Agent"],
+                "Accept": "text/html,*/*",
+                "X-Return-Format": "html",
+                "X-With-Generated-Alt": "false",
+            },
+        )
+        logger.info(f"jina_reader → HTTP {resp.status_code}, len={len(resp.text)}")
+        if resp.status_code == 200 and len(resp.text) > 1000:
+            return resp.text
+        return None
+    except Exception as e:
+        logger.warning(f"jina_reader fetch failed: {e}")
+        return None
+
 
 def _fetch_terra_firma(item_id):
     """
