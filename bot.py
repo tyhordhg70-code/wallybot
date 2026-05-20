@@ -706,8 +706,33 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     app.add_error_handler(error_handler)
 
-    logger.info("Bot starting...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES)
+    # On Render, a new deploy starts before the old instance fully releases
+    # its Telegram long-poll connection.  Retry with back-off until the slot
+    # is free (usually 10-20 s after the old process receives SIGTERM).
+    import time
+    from telegram.error import Conflict
+
+    max_retries = 10
+    for attempt in range(1, max_retries + 1):
+        try:
+            logger.info(f"Bot starting (attempt {attempt}/{max_retries})...")
+            app.run_polling(
+                allowed_updates=Update.ALL_TYPES,
+                drop_pending_updates=True,
+            )
+            break
+        except Conflict:
+            wait = attempt * 6
+            logger.warning(
+                f"Conflict: another instance is still polling. "
+                f"Waiting {wait}s before retry {attempt}/{max_retries}..."
+            )
+            time.sleep(wait)
+        except Exception:
+            logger.exception("Unexpected error during polling startup")
+            raise
+    else:
+        logger.error("Could not start polling after %d attempts — giving up", max_retries)
 
 
 if __name__ == "__main__":
