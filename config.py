@@ -5,8 +5,6 @@ load_dotenv()
 
 TELEGRAM_BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 DATABASE_URL = os.environ.get("NEON_DATABASE_URL") or os.environ["DATABASE_URL"]
-HOODPAY_API_KEY = os.environ.get("HOODPAY_API_KEY", "")
-HOODPAY_BUSINESS_ID = int(os.environ.get("HOODPAY_BUSINESS_ID", "0"))
 NOWPAYMENTS_API_KEY = os.environ.get("NOWPAYMENTS_API_KEY", "")
 SALES_GROUP_CHAT_ID = os.environ.get("SALES_GROUP_CHAT_ID", "")
 
