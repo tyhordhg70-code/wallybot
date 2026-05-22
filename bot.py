@@ -681,6 +681,88 @@ async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE):
         pass
 
 
+async def grant_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """
+    Admin-only command to grant a subscription to any user.
+
+    Usage:  /grant @username DAYS [ITEMS]
+    Examples:
+        /grant @john 7 3   → 7-day plan, 3 items
+        /grant @john 1     → 1-day plan, 1 item (default)
+    """
+    sender = update.effective_user
+    if not config.ADMIN_TELEGRAM_ID or sender.id != config.ADMIN_TELEGRAM_ID:
+        return  # silently ignore non-admins
+
+    args = context.args  # list of words after /grant
+    usage = "Usage: /grant @username DAYS [ITEMS]\nExample: /grant @john 7 3"
+
+    if not args or len(args) < 2:
+        await update.message.reply_text(f"Missing arguments.\n{usage}")
+        return
+
+    raw_username = args[0].lstrip("@").strip()
+    try:
+        days = int(args[1])
+        if days < 1:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text(f"DAYS must be a positive number.\n{usage}")
+        return
+
+    items = 1
+    if len(args) >= 3:
+        try:
+            items = int(args[2])
+            if items < 1:
+                raise ValueError
+        except ValueError:
+            await update.message.reply_text(f"ITEMS must be a positive number.\n{usage}")
+            return
+
+    # Look up the target user in the DB
+    target = db.get_user_by_username(raw_username)
+    if not target:
+        await update.message.reply_text(
+            f"User @{raw_username} not found.\n"
+            "They must have started the bot at least once before you can grant access."
+        )
+        return
+
+    try:
+        duration_label = f"{days} Day{'s' if days != 1 else ''}"
+        sub = db.create_subscription(
+            telegram_id=target["telegram_id"],
+            plan_key="admin_grant",
+            duration_days=days,
+            item_count=items,
+            payment_id=None,
+            plan_duration_label=duration_label,
+        )
+        end_str = sub["end_date"].strftime("%m/%d/%Y")
+        await update.message.reply_text(
+            f"✅ Granted to @{raw_username}:\n"
+            f"  • {duration_label} — {items} item(s)\n"
+            f"  • Expires: {end_str}"
+        )
+        # Notify the user
+        try:
+            await context.bot.send_message(
+                chat_id=target["telegram_id"],
+                text=(
+                    f"🎉 Your subscription has been activated!\n\n"
+                    f"Plan: {duration_label} — {items} item(s)\n"
+                    f"Expires: {end_str}\n\n"
+                    f"Send /start to begin."
+                ),
+            )
+        except Exception:
+            pass  # user may have blocked the bot
+    except Exception as e:
+        logger.exception(f"grant_command failed: {e}")
+        await update.message.reply_text(f"❌ Failed to create subscription: {e}")
+
+
 def main():
     try:
         db.init_db()
@@ -691,6 +773,7 @@ def main():
     app = Application.builder().token(config.TELEGRAM_BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("grant", grant_command))
     app.add_handler(CallbackQueryHandler(button_handler))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, message_handler))
     app.add_error_handler(error_handler)
