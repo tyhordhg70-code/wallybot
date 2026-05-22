@@ -17,7 +17,6 @@ from telegram.ext import (
 
 import config
 import database as db
-import hoodpay_client as hoodpay
 import nowpayments_client as nwp
 import scraper
 import coupon_generator
