@@ -21,6 +21,17 @@ import hoodpay_client as hoodpay
 import scraper
 import coupon_generator
 
+
+def _get_subscription(user):
+    """
+    Return the active subscription for `user`, auto-provisioning a permanent
+    free subscription for anyone listed in config.FREE_USERS.
+    """
+    username = (user.username or "").lower().lstrip("@")
+    if username and username in config.FREE_USERS:
+        return db.ensure_free_subscription(user.id)
+    return db.get_active_subscription(user.id)
+
 logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     level=logging.INFO,
@@ -46,7 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Check active subscription
     try:
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
     except Exception as e:
         logger.exception(f"DB error fetching subscription for {user.id}: {e}")
         sub = None
@@ -278,7 +289,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Add product
     elif data == "add_product":
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
         if not sub:
             await query.edit_message_text("No active subscription. Please buy a plan first.",
                                          reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Buy Plan", callback_data="main_menu")]]))
@@ -306,7 +317,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Generate coupon for existing product
     elif data == "gen_existing":
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
         if not sub:
             await query.edit_message_text("No active subscription.",
                                          reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Buy Plan", callback_data="main_menu")]]))
@@ -344,7 +355,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # View products
     elif data == "view_products":
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
         if not sub:
             await query.edit_message_text("No active subscription.")
             return
@@ -365,7 +376,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
 
     elif data == "back_to_start":
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
         if sub:
             slots = db.get_product_slots(sub["id"])
             remaining = sub["item_count"] - len(slots)
@@ -469,7 +480,7 @@ async def message_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _handle_discount_input(update, context, text)
     elif re.match(r"https?://.*walmart\.com/ip/", text):
         # Auto-detect Walmart links
-        sub = db.get_active_subscription(user.id)
+        sub = _get_subscription(user)
         if not sub:
             await update.message.reply_text(
                 "You need an active subscription to generate coupons.",
@@ -495,7 +506,7 @@ async def _handle_product_link(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     sub_id = context.user_data.get("subscription_id")
-    sub = db.get_active_subscription(user.id)
+    sub = _get_subscription(user)
     if not sub:
         context.user_data["state"] = None
         await update.message.reply_text("No active subscription found.",
