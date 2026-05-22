@@ -215,6 +215,20 @@ def add_product_slot(subscription_id, telegram_id, walmart_url, product_name, pr
     return dict(slot)
 
 
+def get_user_by_username(username):
+    """Look up a user row by Telegram username (case-insensitive, no @)."""
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    cur.execute(
+        "SELECT * FROM users WHERE LOWER(username) = LOWER(%s) LIMIT 1",
+        (username.lstrip("@"),),
+    )
+    row = cur.fetchone()
+    cur.close()
+    conn.close()
+    return dict(row) if row else None
+
+
 def ensure_free_subscription(telegram_id):
     """
     Find or create a permanent (36 500-day / ~100-year) subscription for a
