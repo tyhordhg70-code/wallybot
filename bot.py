@@ -22,13 +22,17 @@ import scraper
 import coupon_generator
 
 
+def _is_free_user(user):
+    username = (user.username or "").lower().lstrip("@")
+    return bool(username and username in config.FREE_USERS)
+
+
 def _get_subscription(user):
     """
     Return the active subscription for `user`, auto-provisioning a permanent
     free subscription for anyone listed in config.FREE_USERS.
     """
-    username = (user.username or "").lower().lstrip("@")
-    if username and username in config.FREE_USERS:
+    if _is_free_user(user):
         return db.ensure_free_subscription(user.id)
     return db.get_active_subscription(user.id)
 
@@ -63,14 +67,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sub = None
     if sub:
         slots = db.get_product_slots(sub["id"])
-        remaining = sub["item_count"] - len(slots)
-        end_str = sub["end_date"].strftime("%m/%d/%Y %I:%M %p EST") if sub["end_date"] else "N/A"
-        text = (
-            f"Welcome back, {user.first_name}!\n\n"
-            f"Active Plan: {sub['plan_duration']} - {sub['item_count']} item(s)\n"
-            f"Expires: {end_str}\n"
-            f"Product slots used: {len(slots)}/{sub['item_count']}\n\n"
-        )
+        free = _is_free_user(user)
+        remaining = 999 if free else sub["item_count"] - len(slots)
+        if free:
+            plan_line = "Active Plan: Unlimited Access\n"
+            slots_line = ""
+        else:
+            end_str = sub["end_date"].strftime("%m/%d/%Y %I:%M %p EST") if sub["end_date"] else "N/A"
+            plan_line = f"Active Plan: {sub['plan_duration']} - {sub['item_count']} item(s)\nExpires: {end_str}\n"
+            slots_line = f"Product slots used: {len(slots)}/{sub['item_count']}\n\n"
+        text = f"Welcome back, {user.first_name}!\n\n{plan_line}{slots_line}"
         keyboard = []
         if remaining > 0:
             keyboard.append([InlineKeyboardButton("Add New Product Link", callback_data="add_product")])
@@ -296,7 +302,8 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         slots = db.get_product_slots(sub["id"])
-        remaining = sub["item_count"] - len(slots)
+        free = _is_free_user(user)
+        remaining = 999 if free else sub["item_count"] - len(slots)
         if remaining <= 0:
             await query.edit_message_text(
                 "All product slots are filled! You can generate coupons for your existing products.",
@@ -309,9 +316,9 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data["state"] = "awaiting_link"
         context.user_data["subscription_id"] = sub["id"]
+        slot_line = "" if free else f"You have {remaining} product slot(s) remaining.\n\n"
         await query.edit_message_text(
-            f"You have {remaining} product slot(s) remaining.\n\n"
-            "Please send me a Walmart.com product link.\n"
+            f"{slot_line}Please send me a Walmart.com product link.\n"
             "Example: https://www.walmart.com/ip/Product-Name/12345678"
         )
 
@@ -379,13 +386,17 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         sub = _get_subscription(user)
         if sub:
             slots = db.get_product_slots(sub["id"])
-            remaining = sub["item_count"] - len(slots)
-            end_str = sub["end_date"].strftime("%m/%d/%Y %I:%M %p") if sub["end_date"] else "N/A"
-            text = (
-                f"Active Plan: {sub['plan_duration']} - {sub['item_count']} item(s)\n"
-                f"Expires: {end_str}\n"
-                f"Product slots used: {len(slots)}/{sub['item_count']}\n"
-            )
+            free = _is_free_user(user)
+            remaining = 999 if free else sub["item_count"] - len(slots)
+            if free:
+                text = "Active Plan: Unlimited Access\n"
+            else:
+                end_str = sub["end_date"].strftime("%m/%d/%Y %I:%M %p") if sub["end_date"] else "N/A"
+                text = (
+                    f"Active Plan: {sub['plan_duration']} - {sub['item_count']} item(s)\n"
+                    f"Expires: {end_str}\n"
+                    f"Product slots used: {len(slots)}/{sub['item_count']}\n"
+                )
             keyboard = []
             if remaining > 0:
                 keyboard.append([InlineKeyboardButton("Add New Product Link", callback_data="add_product")])
@@ -515,7 +526,7 @@ async def _handle_product_link(update: Update, context: ContextTypes.DEFAULT_TYP
 
     sub_id = sub["id"]
     slots = db.get_product_slots(sub_id)
-    remaining = sub["item_count"] - len(slots)
+    remaining = 999 if _is_free_user(user) else sub["item_count"] - len(slots)
 
     await update.message.reply_text("Fetching product info... Please wait.")
 
