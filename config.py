@@ -9,6 +9,10 @@ HOODPAY_API_KEY = os.environ["HOODPAY_API_KEY"]
 HOODPAY_BUSINESS_ID = int(os.environ.get("HOODPAY_BUSINESS_ID", "0"))
 SALES_GROUP_CHAT_ID = os.environ.get("SALES_GROUP_CHAT_ID", "")
 
+# Telegram user ID of the bot admin (can use /grant command).
+# Find yours by messaging @userinfobot.
+ADMIN_TELEGRAM_ID = int(os.environ.get("ADMIN_TELEGRAM_ID", "0"))
+
 # Usernames (lowercase, no @) that get a permanent free subscription.
 # Always includes hardcoded names; extend via FREE_USERS env var (comma-separated).
 _env_free = {u.strip().lower().lstrip("@") for u in os.environ.get("FREE_USERS", "").split(",") if u.strip()}
