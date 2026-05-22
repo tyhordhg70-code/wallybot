@@ -215,6 +215,36 @@ def add_product_slot(subscription_id, telegram_id, walmart_url, product_name, pr
     return dict(slot)
 
 
+def ensure_free_subscription(telegram_id):
+    """
+    Find or create a permanent (36 500-day / ~100-year) subscription for a
+    free/admin user.  Called once per bot interaction — idempotent.
+    """
+    sub = get_active_subscription(telegram_id)
+    if sub:
+        return sub
+    conn = get_connection()
+    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    get_or_create_user(telegram_id)
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=36500)
+    cur.execute(
+        """INSERT INTO subscriptions
+               (user_id, telegram_id, plan_key, plan_duration, duration_days,
+                item_count, start_date, end_date, status, payment_id)
+           VALUES (
+               (SELECT id FROM users WHERE telegram_id = %s LIMIT 1),
+               %s, 'free', 'Unlimited', 36500, 999, %s, %s, 'active', NULL
+           ) RETURNING *""",
+        (telegram_id, telegram_id, now, end),
+    )
+    sub = cur.fetchone()
+    conn.commit()
+    cur.close()
+    conn.close()
+    return dict(sub)
+
+
 def find_product_slot_by_upc(subscription_id, upc_first6):
     conn = get_connection()
     cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
