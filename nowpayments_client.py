@@ -78,7 +78,15 @@ def extract_invoice_id(invoice_response):
 
 
 def extract_checkout_url(invoice_response):
-    """Build the hosted checkout URL from an invoice response."""
+    """Return the hosted checkout URL from an invoice response.
+
+    Uses the invoice_url field returned by the API if present; falls back to
+    constructing it from the invoice id (same format, just defensive).
+    """
+    if not invoice_response:
+        return None
+    if invoice_response.get("invoice_url"):
+        return invoice_response["invoice_url"]
     invoice_id = extract_invoice_id(invoice_response)
     if invoice_id:
         return f"https://nowpayments.io/payment/?iid={invoice_id}"
@@ -88,8 +96,8 @@ def extract_checkout_url(invoice_response):
 def get_invoice_status(invoice_id):
     """
     Return the overall status string for an invoice by inspecting its payments.
-    Returns one of: 'finished', 'confirmed', 'partially_paid', 'waiting',
-    'confirming', 'sending', 'failed', 'expired', 'refunded', or None.
+    Returns one of: 'finished', 'partially_paid', 'waiting', 'confirming',
+    'confirmed', 'sending', 'failed', 'expired', 'refunded', or None.
     """
     payments = get_payments_for_invoice(invoice_id)
     if not payments:
@@ -100,10 +108,16 @@ def get_invoice_status(invoice_id):
 
 
 def is_payment_completed(status):
-    """True when the user has fully paid."""
+    """True when the user has fully paid and funds are on their way / arrived.
+
+    NOWPayments docs explicitly say NOT to grant goods/services at 'confirming'
+    or 'confirmed' — those statuses mean blockchain confirmations only.
+    Only 'sending' (funds being forwarded to your wallet) and 'finished'
+    (fully settled) are safe triggers.
+    """
     if not status:
         return False
-    return status.lower() in ("finished", "confirmed", "sending")
+    return status.lower() in ("finished", "sending")
 
 
 def is_payment_failed(status):
