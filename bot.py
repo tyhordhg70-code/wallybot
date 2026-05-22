@@ -18,6 +18,7 @@ from telegram.ext import (
 import config
 import database as db
 import hoodpay_client as hoodpay
+import nowpayments_client as nwp
 import scraper
 import coupon_generator
 
@@ -204,8 +205,7 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard.append([InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")])
         await query.edit_message_text(f"{title}\n\nSelect your plan:", reply_markup=InlineKeyboardMarkup(keyboard))
 
-    # Plan selection -> show manual-payment / contact-admin message
-    # (Automated crypto payments are temporarily disabled.)
+    # Plan selection -> create NOWPayments invoice
     elif data.startswith("plan_"):
         plan_key = data[5:]
         plan = config.PLANS.get(plan_key)
@@ -213,26 +213,62 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Invalid plan. Please try again.")
             return
 
-        admin_username = os.environ.get("ADMIN_USERNAME", "").lstrip("@").strip()
-        if admin_username:
-            contact_line = f"Please contact @{admin_username} to complete your purchase."
-            keyboard = [
-                [InlineKeyboardButton(f"Message @{admin_username}", url=f"https://t.me/{admin_username}")],
-                [InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")],
-            ]
-        else:
-            contact_line = "Please contact the admin to complete your purchase."
-            keyboard = [
-                [InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")],
-            ]
-
         await query.edit_message_text(
-            f"Plan: {plan['label']}\n"
-            f"Amount: ${plan['price']}\n\n"
-            f"Automated payments are temporarily unavailable.\n"
-            f"{contact_line}",
-            reply_markup=InlineKeyboardMarkup(keyboard),
+            f"⏳ Creating your payment link for {plan['label']}...\nPlease wait a moment."
         )
+
+        # Record the pending payment in DB
+        payment = db.create_payment(
+            telegram_id=user.id,
+            amount=plan["price"],
+            plan_key=plan_key,
+            plan_label=plan["label"],
+        )
+
+        # Create NOWPayments hosted invoice
+        invoice = nwp.create_invoice(
+            amount=plan["price"],
+            order_id=payment["id"],
+            description=f"WallyBot – {plan['label']} (user {user.id})",
+        )
+
+        checkout_url = nwp.extract_checkout_url(invoice)
+        invoice_id = nwp.extract_invoice_id(invoice)
+
+        if invoice_id:
+            db.update_payment_hoodpay(payment["id"], invoice_id, checkout_url)
+
+        if checkout_url:
+            keyboard = [
+                [InlineKeyboardButton("Pay Now (Crypto)", url=checkout_url)],
+                [InlineKeyboardButton("I've Paid – Check Status", callback_data=f"check_{payment['id']}")],
+                [InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")],
+            ]
+            await query.edit_message_text(
+                f"Plan: {plan['label']}\n"
+                f"Amount: ${plan['price']}\n\n"
+                "Click the button below to pay with crypto (Bitcoin, USDT, ETH, and 200+ more).\n"
+                "After payment, click 'I've Paid' to activate your subscription.",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
+        else:
+            # NOWPayments unavailable — fall back to admin contact
+            admin_username = os.environ.get("ADMIN_USERNAME", "").lstrip("@").strip()
+            if admin_username:
+                keyboard = [
+                    [InlineKeyboardButton(f"Message @{admin_username}", url=f"https://t.me/{admin_username}")],
+                    [InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")],
+                ]
+                contact_line = f"Please contact @{admin_username} to complete your purchase."
+            else:
+                keyboard = [[InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")]]
+                contact_line = "Please contact the admin to complete your purchase."
+            await query.edit_message_text(
+                f"Plan: {plan['label']}\n"
+                f"Amount: ${plan['price']}\n\n"
+                f"Payment gateway is temporarily unavailable.\n{contact_line}",
+                reply_markup=InlineKeyboardMarkup(keyboard),
+            )
 
     # Check payment status
     elif data.startswith("check_"):
@@ -246,26 +282,27 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.edit_message_text("Payment already completed! Use /start to access your subscription.")
             return
 
-        # Check with HoodPay
-        if payment.get("hoodpay_id"):
-            hp_status_resp = hoodpay.get_payment(payment["hoodpay_id"])
-            hp_status = hoodpay.extract_payment_status(hp_status_resp)
-
-            if hoodpay.is_payment_completed(hp_status):
+        # Check with NOWPayments using the invoice ID stored in hoodpay_id column
+        invoice_id = payment.get("hoodpay_id")
+        if invoice_id:
+            status = nwp.get_invoice_status(invoice_id)
+            if nwp.is_payment_completed(status):
                 await _activate_subscription(query, user, payment)
                 return
-            elif hoodpay.is_payment_failed(hp_status):
-                db.update_payment_status(payment_id, hp_status)
+            elif nwp.is_payment_failed(status):
+                db.update_payment_status(payment_id, status)
                 await query.edit_message_text(
-                    f"Payment {hp_status}. Please select a new plan.",
+                    f"Payment {status}. Please select a new plan.",
                     reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("Back to Plans", callback_data="main_menu")]]),
                 )
                 return
 
-        keyboard = [
-            [InlineKeyboardButton("Check Again", callback_data=f"check_{payment_id}")],
-            [InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")],
-        ]
+        checkout_url = payment.get("hoodpay_checkout_url")
+        keyboard = []
+        if checkout_url:
+            keyboard.append([InlineKeyboardButton("Pay Now (Crypto)", url=checkout_url)])
+        keyboard.append([InlineKeyboardButton("Check Again", callback_data=f"check_{payment_id}")])
+        keyboard.append([InlineKeyboardButton("<< Back to Plans", callback_data="main_menu")])
         await query.edit_message_text(
             "Payment not yet confirmed. Please complete the payment and check again.",
             reply_markup=InlineKeyboardMarkup(keyboard),
